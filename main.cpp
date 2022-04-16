@@ -1,5 +1,10 @@
+#include "App.h"
+
+#include <unistd.h>
+
 #include <iostream>
 #include <stdexcept>
+#include <set>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -10,194 +15,202 @@
 #define ANALYZE 1
 #endif
 
+// This is not definition?
 auto Cleanup = [](GLFWwindow *window) {
-  if (window) {
-    glfwDestroyWindow(window);
-  }
-  glfwTerminate();
+    if (window) {
+   		glfwDestroyWindow(window);
+    }
+    glfwTerminate();
 };
 
 constexpr int SZX = 600;
 constexpr int SZY = 600;
 
-// TODO:
+const std::vector<const char *> validationLayers = {
+    "VK_LAYER_KHRONOS_validation"};
+
+// extensions list to query
+const std::vector<const char *> deviceExtensions = {
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+
 #define VK_CHECK_RESULT(function)                                                \
     {                                                                            \
-        vk::Result Res = (function);                                             \
-    	if (Res != vk::Result::eSuccess) {                                                   \
+        vk::Result Res = (vk::Result) (function);                                \
+    	if (Res != vk::Result::eSuccess) {                                       \
       		std::ostringstream out;                                              \
      		out << "Vulkan error at " << __FILE__ << ":" << __LINE__ << "\n";    \
+     		throw vulkan_error(Res, out.str());								     \
     	}                                                                        \
   	}
 
-     		/*throw vulkan_error(Res, out.str());*/							      /*TODO*/
 
 #define dbgs                                                                     \
     if (!ANALYZE) {                                                              \
     } else                                                                       \
     	std::cout
 
+
 struct VKApp {
 
-	//std::unique_ptr<GLFWwindow, decltype(Cleanup)> window;
-	//GLFWwindow* window; // TODO
+	std::unique_ptr<GLFWwindow, decltype(Cleanup)> window;
 
 	vk::Instance Instance;
-	//VkPhysicalDevice PhysDevice;
-	//VkDevice Device;
 	vk::SurfaceKHR Surface;
-	/*VkQueue GraphicsQueue;
-	VkQueue PresentQueue;
-	VkSwapchainKHR SwapChain;
-	VkExtent2D Extent;
-	VkSurfaceFormatKHR SurfaceFormat;
-	std::vector<VkImage> SwapChainImages;
-	VkFormat SwapChainImageFormat;
-	VkExtent2D SwapChainExtent;
-	std::vector<VkImageView> SwapChainImageViews;
-	std::vector<VkFramebuffer> SwapChainFramebuffers;
-	VkRenderPass RenderPass;
-	VkPipelineLayout PipelineLayout;
-	VkPipeline GraphicsPipeline;
-	VkCommandPool CommandPool;
-	VkBuffer VertexBuffer;
-	VkDeviceMemory VertexBufferMemory;
-	VkBuffer IndexBuffer;
-	VkDeviceMemory IndexBufferMemory;
-	std::vector<VkCommandBuffer> CommandBuffers;
-	std::vector<VkSemaphore> ImageAvailableSemaphores;
-	std::vector<VkSemaphore> RenderFinishedSemaphores;
-	std::vector<VkFence> InFlightFences;
-	std::vector<VkFence> ImagesInFlight;
-	size_t CurrentFrame = 0;
-	VkShaderModule StoredVertexID, StoredFragmentID;
+    vk::PhysicalDevice PhysDevice;
+    vk::Device Device;
+    vk::Queue GraphicsQueue;
+    vk::Queue PresentQueue;
 
-	unsigned PresentFamily = -1u;
 	unsigned GraphicsFamily = -1u;
+	unsigned PresentFamily = -1u;
 
-	*/
+	VKApp() : window(nullptr, Cleanup) {}
 
 	void initialize_window();
 	void create_instance();
-	/*void peek_device();
-	void find_queues();
-	void create_logical_device();
-
-	VkShaderModule installShader(std::vector<char> ShaderCode);
-
-	void create_swap_chain();
-	void create_image_views();
-	void create_render_pass();
-	void create_descset_layout();
-	void create_pipeline(VkShaderModule VertexID, VkShaderModule FragmentID);
-	void create_frame_buffer();
-	void create_command_pool();
-	void create_buffers();
-	void create_command_buffers();
-	void create_sync_objs();
-
-	void render_frame();
-	void run();
-
-	unsigned findMemoryType(unsigned typeFilter,
-	                      VkMemoryPropertyFlags properties);
-	void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
-	                VkMemoryPropertyFlags properties, VkBuffer &buffer,
-	                VkDeviceMemory &bufferMemory);
-	void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
+	void peek_device();
+    void find_queues();
+    void create_logical_device();
 
 	bool FramebufferResized;
 
-	VkApp() : Wnd(nullptr, Cleanup) {}
-
-	void update_swap_chain(); // really create from scratch
-
-	void cleanup_swap_chain() {
-	for (auto framebuffer : SwapChainFramebuffers)
-	    vkDestroyFramebuffer(Device, framebuffer, nullptr);
-
-	vkFreeCommandBuffers(Device, CommandPool, CommandBuffers.size(),
-	                     CommandBuffers.data());
-
-	vkDestroyPipeline(Device, GraphicsPipeline, nullptr);
-	vkDestroyPipelineLayout(Device, PipelineLayout, nullptr);
-	vkDestroyRenderPass(Device, RenderPass, nullptr);
-
-	for (auto imageView : SwapChainImageViews)
-	    vkDestroyImageView(Device, imageView, nullptr);
-
-		vkDestroySwapchainKHR(Device, SwapChain, nullptr);
+  	~VKApp() {
+		
+		Instance.destroySurfaceKHR(Surface);
+		Instance.destroy();
 	}
-
-	~VkApp() {
-		cleanup_swap_chain();
-
-		// TODO: to "unique pointers"
-		vkDestroyDevice(Device, nullptr);
-		vkDestroySurfaceKHR(Instance, Surface, nullptr);
-		vkDestroyInstance(Instance, nullptr);
-	}*/
 };
 
-// custom error handler class
 struct glfw_error : public std::runtime_error {
-    glfw_error(const char *s) : std::runtime_error(s) {}
+    glfw_error(const char *str) : std::runtime_error(str) {}
 };
 
-// vulkan-specific error (knows error code)
 struct vulkan_error : public std::runtime_error {
-    VkResult Res;
-    vulkan_error(VkResult R, std::string S) : std::runtime_error(S), Res(R) {}
+    vk::Result Res;
+    vulkan_error(vk::Result res, std::string str) : std::runtime_error(str), Res(res) {}
 };
 
-// throw on errors
 void error_callback(int, const char *err_str) { throw glfw_error(err_str); }
-/*
-// make sure the viewport matches the new window dimensions
+
 void framebuffer_size_callback(GLFWwindow *window, int width, int height) {
     auto App = reinterpret_cast<VKApp *>(glfwGetWindowUserPointer(window));
-    //App->FramebufferResized = true; // TODO
-}*/
+    App->FramebufferResized = true;
+}
 
 void VKApp::initialize_window() {
 
 	glfwInit();
 	glfwSetErrorCallback(error_callback);
-
-	// this is interesting:
-	// GLFW_NO_API required to NOT create OpenGL context
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
-	auto *Window = glfwCreateWindow(SZX, SZY, "Hello, Vulkan", NULL, NULL);
-	assert(Window); // error callback shall throw otherwise
-	// so no need to call glfwMakeContextCurrent
+	auto *Window = glfwCreateWindow(SZX, SZY, "Triangles", NULL, NULL);
+	assert(Window);
+
 	glfwSetWindowUserPointer(Window, this);
-	//glfwSetFramebufferSizeCallback(Window, framebuffer_size_callback); TODO
-	//window->reset(Window); TODO
+	glfwSetFramebufferSizeCallback(Window, framebuffer_size_callback); 
+	window.reset(Window);
 }
 
 void VKApp::create_instance() {
-							// Is it correct?
-	vk::ApplicationInfo appInfo ("Triangles", VK_MAKE_VERSION(1, 0, 0), "No Engine",
-								 VK_MAKE_VERSION(1, 0, 0), VK_API_VERSION_1_0);
+
 
 	unsigned glfwExtensionCount = 0;
 	
 	const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 	dbgs << "Enumerated: " << glfwExtensionCount << " glfw required extensions\n";
 
-												//No validation layers
+	vk::ApplicationInfo appInfo ("Triangles", 1, "No Engine", 1, VK_API_VERSION_1_0);
 	vk::InstanceCreateInfo createInfo({}, &appInfo, 0, nullptr, glfwExtensionCount, glfwExtensions);
+	Instance = vk::createInstance(createInfo); //No validation layers
 
-	//vk::createInstance(&createInfo, nullptr, &Instance);
-	//TODO:
-	/*VK_CHECK_RESULT();*/
-	//glfwCreateWindowSurface(Instance, window.get(), nullptr, &Surface);
-	/*VK_CHECK_RESULT();*/
+	VK_CHECK_RESULT(glfwCreateWindowSurface(Instance, window.get(), nullptr, (VkSurfaceKHR*) &Surface));
+}
+
+void VKApp::peek_device() {
+	
+	unsigned deviceCount = 0;
+	
+	// list of devices
+	PhysDevice = Instance.enumeratePhysicalDevices().front();
+
+	//Instance.enumeratePhysicalDevices();
+
+	/*VK_CHECK_RESULT(vk::EnumeratePhysicalDevices(Instance, &deviceCount, nullptr));
+	if (deviceCount != 1) // =)
+	    throw std::runtime_error("Multiple Vulkan devices not supported yet");
+
+	dbgs << deviceCount << " devices enumerated\n";
+	VK_CHECK_RESULT(vk::EnumeratePhysicalDevices(Instance, &deviceCount, &PhysDevice));*/
+}
+
+void VKApp::find_queues() {
+	
+	std::vector<vk::QueueFamilyProperties> queueFamilies = PhysDevice.getQueueFamilyProperties();
+	dbgs << queueFamilies.size() << " queue families found\n";
+
+	unsigned i = 0;
+
+	for(const auto &queueFamily : queueFamilies) { // maybe this is algorithm?
+
+		if (queueFamily.queueFlags & vk::QueueFlagBits::eGraphics) {
+		    GraphicsFamily = i;
+		    dbgs << "Graphics queue family: " << i << std::endl;
+		}
+
+		if (PhysDevice.getSurfaceSupportKHR(i, Surface)) {
+		    PresentFamily = i;
+		    dbgs << "Present queue family: " << i << std::endl;
+		}
+		
+		if (PresentFamily != -1u && GraphicsFamily != -1u) {
+		    break;
+		}
+		
+		i += 1;
+	}
+
+	if (PresentFamily == -1u || GraphicsFamily == -1u)
+		throw std::runtime_error("Present and Graphics not found");
+}
+
+void VKApp::create_logical_device() { // ??
+	
+	std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
+
+	float queuePriority = 1.0f;
+
+	vk::DeviceQueueCreateInfo queueCreateInfoPresent(vk::DeviceQueueCreateFlags(), PresentFamily, 1, &queuePriority);
+	vk::DeviceQueueCreateInfo queueCreateInfoGraphics(vk::DeviceQueueCreateFlags(), GraphicsFamily, 1, &queuePriority);
+	queueCreateInfos.push_back(queueCreateInfoPresent);
+	queueCreateInfos.push_back(queueCreateInfoGraphics);	
+
+	// note: we are querying no device features ??
+	vk::PhysicalDeviceFeatures deviceFeatures{}; // ?
+	dbgs << deviceExtensions.size() << " device extensions to enable\n";
+	
+	//TODO: ARRAY_PROXY
+	vk::DeviceCreateInfo createInfo{};
+	createInfo.queueCreateInfoCount = queueCreateInfos.size();
+	createInfo.pQueueCreateInfos = queueCreateInfos.data();
+	createInfo.pEnabledFeatures = &deviceFeatures;
+	createInfo.enabledExtensionCount = deviceExtensions.size();
+	createInfo.ppEnabledExtensionNames = deviceExtensions.data();
+
+	Device = PhysDevice.createDevice(createInfo);
+
+	Device.getQueue(GraphicsFamily, 0, &GraphicsQueue);
+	Device.getQueue(PresentFamily, 0, &PresentQueue);
 }
 
 int main() {
 
 	VKApp App;
+    App.initialize_window();
 	App.create_instance();
+	App.peek_device();
+    App.find_queues();
+    App.create_logical_device();
+
+	sleep(3);
+	std::cout << "Success exit" << std::endl;
 }
